@@ -8,7 +8,7 @@ The computed distance and the execution time are then stored in a CSV file in th
 
 ## Dependencies
 - [GeographicLib](https://www.npmjs.com/package/geographiclib)
-- [node-seal](https://github.com/s0l0ist/node-seal) (must be installed manually)
+- [node-seal](https://github.com/s0l0ist/node-seal)
 
 ## Installation
 Clone repo and run "npm install"
