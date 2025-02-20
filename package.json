@@ -1,0 +1,6 @@
+{
+  "dependencies": {
+    "geographiclib": "^1.52.2",
+    "node-seal": "^5.1.4"
+  }
+}
