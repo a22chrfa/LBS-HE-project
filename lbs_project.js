@@ -1,48 +1,56 @@
-(async () => {
-    /* ------------------------------------------------ IMPORTS AND OTHER DEPENDENCIES ------------------------------------------------ */
-    process.stdout.write("\x1Bc"); //clear the console
+/* ------------------------------------------------ IMPORTS AND OTHER DEPENDENCIES ------------------------------------------------ */
+process.stdout.write("\x1Bc"); //clear the console
+const GeographicLib = require("geographiclib");
+const fs = require('fs');
+const path = require('path');
 
-    const SEAL = require('node-seal');
-    const seal = await SEAL();
-    const GeographicLib = require("geographiclib");
-    const fs = require('fs');
-    const path = require('path');
+// Create output csv-file with headers
+const outputFilePath = path.join(__dirname, 'results.csv');
+if (fs.existsSync(outputFilePath)) {
+    fs.unlinkSync(outputFilePath);
+    console.log(`Deleting existing file: ${outputFilePath}`);
+}
+console.log(`Creating new file: ${outputFilePath}`);
+const headers = `"Iteration","Client A: X","Client A: Y","Client A: Z","Client B: X","Client B: Y","Client B: Z","Client A: lat","Client A: lon","Client B: lat","Client B: lon","Plaintext comp (ms)","Encrypted comp (ms)","Plaintext dist (km)","Encrypted dist (km)","Karney dist (km)"\n`;
+fs.appendFileSync(outputFilePath, headers, 'utf8');
 
-    // Create output csv-file with headers
-    const outputFilePath = path.join(__dirname, 'results.csv');
-    if (fs.existsSync(outputFilePath)) {
-        fs.unlinkSync(outputFilePath);
-        console.log(`Deleting existing file: ${outputFilePath}`);
-    }
-    console.log(`Creating new file: ${outputFilePath}`);
-    const headers = `"Iteration","Encrypted time (ms)","Unencrypted time (ms)","Encrypted distance (km)","Unencrypted distance (km)","Karney distance ref (km)"\n`;
-    fs.appendFileSync(outputFilePath, headers, 'utf8');
+// https://github.com/LenaSYS/Random-Number-Generator/blob/master/seededrandom.js
+// Jenkins small fast with replaced .random() for deterministic random numbers, courtesy of LenaSYS
+function jsf32(a, b, c, d) {
+    a |= 0; b |= 0; c |= 0; d |= 0;
+    var t = a - (b << 23 | b >>> 9) | 0;
+    a = b ^ (c << 16 | c >>> 16) | 0;
+    b = c + (d << 11 | d >>> 21) | 0;
+    b = c + d | 0;
+    c = d + t | 0;
+    d = a + t | 0;
+    return (d >>> 0) / 4294967296;
+}
+Math.random = function () {
+    let ran = jsf32(0xF1EA5EED, Math.randSeed + 6871, Math.randSeed + 1889, Math.randSeed + 56781);
+    Math.randSeed += Math.floor(ran * 37237);
+    return (ran)
+}
+Math.setSeed = function (seed) {
+    Math.randSeed = seed;
+    for (let i = 0; i < 7; i++) Math.random();
+}
 
+// Enable input output in console
+const readline = require('readline').createInterface({
+    input: process.stdin,
+    output: process.stdout
+});
 
-    // https://github.com/LenaSYS/Random-Number-Generator/blob/master/seededrandom.js
-    // Jenkins small fast with replaced .random() for deterministic random numbers, courtesy of LenaSYS
-    function jsf32(a, b, c, d) {
-        a |= 0; b |= 0; c |= 0; d |= 0;
-        var t = a - (b << 23 | b >>> 9) | 0;
-        a = b ^ (c << 16 | c >>> 16) | 0;
-        b = c + (d << 11 | d >>> 21) | 0;
-        b = c + d | 0;
-        c = d + t | 0;
-        d = a + t | 0;
-        return (d >>> 0) / 4294967296;
-    }
-    Math.random = function () {
-        let ran = jsf32(0xF1EA5EED, Math.randSeed + 6871, Math.randSeed + 1889, Math.randSeed + 56781);
-        Math.randSeed += Math.floor(ran * 37237);
-        return (ran)
-    }
-    Math.setSeed = function (seed) {
-        Math.randSeed = seed;
-        for (let i = 0; i < 7; i++) Math.random();
-    }
-
+// Prompt and run
+readline.question('Set # iterations: ', async (input) => {
+    let max_iterations = parseInt(input);
+    readline.close();
 
     /* ------------------------------------------------ SEAL INITIALIZATION ------------------------------------------------ */
+    const SEAL = require('node-seal');
+    const seal = await SEAL();
+
     // Settings
     const schemeType = seal.SchemeType.ckks;
     const securityLevel = seal.SecurityLevel.tc192;
@@ -73,10 +81,10 @@
     // Iteration settings
     const R = 6371; // Earth's radius in km
     const geod = GeographicLib.Geodesic.WGS84; //WGS84 model for earth
-    const max_iterations = 100;
+    //const max_iterations = 10;
     console.log('\nPerforming encryption and calculations...');
 
-    for (let i = 0; i < max_iterations + 1; i++) {
+    for (let i = 0; i < max_iterations; i++) {
         Math.setSeed(i);
 
         /* ------------------------------------------------ 1 CLIENT SIDE OPERATIONS ------------------------------------------------ */
@@ -138,7 +146,6 @@
         let encrypted_Y_B = encryptor.encrypt(encoded_Y_B);
         let encrypted_Z_B = encryptor.encrypt(encoded_Z_B);
 
-
         /* ------------------------------------------------ 2 SERVER SIDE COMPUTATIONS ------------------------------------------------ */
         // Encrypted computations
         let encrypted_time_start = process.hrtime(); //start time for encrypted computations
@@ -153,14 +160,12 @@
         let encrypted_sum_sq = evaluator.add(encrypted_sum_sq_1, encrypted_delta_z_sq);
         let encrypted_time_stop = process.hrtime(encrypted_time_start); //stop time for encrypted computations
 
-
         /* ------------------------------------------------ 3 SEND BACK TO CLIENTS ------------------------------------------------ */
         // Clients receive the squared results to decrypt and square root
         let decrypted_sum = decryptor.decrypt(encrypted_sum_sq);
         let decoded_sum = ckksEncoder.decode(decrypted_sum);
         let encrypted_distance_float = parseFloat(decoded_sum[0]);
         let encrypted_distance = Math.sqrt(encrypted_distance_float);
-
 
         /* ------------------------------------------------ OTHER COMPUTATIONS FOR DATA ------------------------------------------------ */
         // Plaintext computations (comparisons)
@@ -182,18 +187,15 @@
         );
 
         /* ------------------------------------------------ STORE DATA TO FILE ------------------------------------------------ */
-        // Store data if NOT first iteration
-        if (i > 0) {
-            //track progress in console
-            if ((max_iterations + 1 - i) % 50 === 0) {
-                console.log("Item: ", max_iterations + 1 - i);
-            }
-            // Output to CSV
-            let encrypted_time = (encrypted_time_stop[0] * 1000 + (encrypted_time_stop[1] / 1000000));
-            let plaintext_time = (plaintext_time_stop[0] * 1000 + (plaintext_time_stop[1] / 1000000));
-            const csvData = `${i},${encrypted_time},${plaintext_time},${encrypted_distance.toFixed(5)},${plaintext_distance.toFixed(5)},${((karney_result.s12 / 1000).toFixed(5))}\n`;
-            fs.appendFileSync(outputFilePath, csvData, 'utf8');
+        //track progress in console
+        if ((max_iterations + 1 - i) % 50 === 0) {
+            console.log("Item: ", max_iterations + 1 - i);
         }
+        // Output to CSV
+        let encrypted_time = (encrypted_time_stop[0] * 1000 + (encrypted_time_stop[1] / 1000000));
+        let plaintext_time = (plaintext_time_stop[0] * 1000 + (plaintext_time_stop[1] / 1000000));
+        const csvData = `${i + 1},${X_A},${Y_A},${Z_A},${X_B},${Y_B},${Z_B},${client_A_latitude},${client_A_longitude},${client_B_latitude},${client_B_longitude},${plaintext_time},${encrypted_time},${plaintext_distance.toFixed(5)},${encrypted_distance.toFixed(5)},${((karney_result.s12 / 1000).toFixed(5))}\n`;
+        fs.appendFileSync(outputFilePath, csvData, 'utf8');
 
         //Free up memory
         encrypted_X_A.delete();
@@ -228,4 +230,4 @@
     ckksEncoder.delete();
     parms.delete();
     console.log("\nDone!");
-})();
+});
