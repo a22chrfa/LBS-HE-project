@@ -27,61 +27,87 @@
     const encryptor = seal.Encryptor(context, publicKey);
     const decryptor = seal.Decryptor(context, secretKey);
     const evaluator = seal.Evaluator(context);
+    const R = 6371; // Earth's radius in km
 
-    let testValue_1 = 4.509812;
-    let testValue_2 = 2.145675;
-    let ref_value_multiply = testValue_1 ** 2;
-    let ref_value_subtract = testValue_1 - testValue_2;
-    let ref_value_add = testValue_1 + testValue_1;
+    //CLIENT A
+    let client_A_latitude = 32.92374; //phi
+    let client_A_longitude = 32.03947; //lambda
+
+    //to radians
+    let client_A_latitude_radian = client_A_latitude * (Math.PI / 180);
+    let client_A_longitude_radian = client_A_longitude * (Math.PI / 180);
+
+    //convert to cartesian
+    let X_A = R * Math.cos(client_A_latitude_radian) * Math.cos(client_A_longitude_radian);
+    let Y_A = R * Math.cos(client_A_latitude_radian) * Math.sin(client_A_longitude_radian);
+    let Z_A = R * Math.sin(client_A_latitude_radian);
+
+    //CLIENT B
+    let client_B_latitude = 18.03473; //phi
+    let client_B_longitude = 24.08465; //lambda
+
+    //convert to radians
+    let client_B_latitude_radian = client_B_latitude * (Math.PI / 180);
+    let client_B_longitude_radian = client_B_longitude * (Math.PI / 180);
+
+    //convert to cartesian
+    let X_B = R * Math.cos(client_B_latitude_radian) * Math.cos(client_B_longitude_radian);
+    let Y_B = R * Math.cos(client_B_latitude_radian) * Math.sin(client_B_longitude_radian);
+    let Z_B = R * Math.sin(client_B_latitude_radian);
+
+    //CLIENT A AND B ENCRYPTIONS
+    //store in array
+    let arr_X_A = Float64Array.from([X_A]);
+    let arr_Y_A = Float64Array.from([Y_A]);
+    let arr_Z_A = Float64Array.from([Z_A]);
+    let arr_X_B = Float64Array.from([X_B]);
+    let arr_Y_B = Float64Array.from([Y_B]);
+    let arr_Z_B = Float64Array.from([Z_B]);
+
+    //encode values
+    let encoded_X_A = ckksEncoder.encode(arr_X_A, scale);
+    let encoded_Y_A = ckksEncoder.encode(arr_Y_A, scale);
+    let encoded_Z_A = ckksEncoder.encode(arr_Z_A, scale);
+    let encoded_X_B = ckksEncoder.encode(arr_X_B, scale);
+    let encoded_Y_B = ckksEncoder.encode(arr_Y_B, scale);
+    let encoded_Z_B = ckksEncoder.encode(arr_Z_B, scale);
+
+    //encrypt encoded values
+    let encrypted_X_A = encryptor.encrypt(encoded_X_A);
+    let encrypted_Y_A = encryptor.encrypt(encoded_Y_A);
+    let encrypted_Z_A = encryptor.encrypt(encoded_Z_A);
+    let encrypted_X_B = encryptor.encrypt(encoded_X_B);
+    let encrypted_Y_B = encryptor.encrypt(encoded_Y_B);
+    let encrypted_Z_B = encryptor.encrypt(encoded_Z_B);
+
+    //encrypted computations and decryptions
+    let encrypted_delta_x = evaluator.sub(encrypted_X_A, encrypted_X_B);
+    let encrypted_delta_y = evaluator.sub(encrypted_Y_A, encrypted_Y_B);
+    let encrypted_delta_z = evaluator.sub(encrypted_Z_A, encrypted_Z_B);
+
+    let encrypted_delta_x_sq = evaluator.multiply(encrypted_delta_x, encrypted_delta_x);
+    let encrypted_delta_y_sq = evaluator.multiply(encrypted_delta_y, encrypted_delta_y);
+    let encrypted_delta_z_sq = evaluator.multiply(encrypted_delta_z, encrypted_delta_z);
+    let encrypted_sum_sq_1 = evaluator.add(encrypted_delta_x_sq, encrypted_delta_y_sq);
+    let encrypted_sum_sq = evaluator.add(encrypted_sum_sq_1, encrypted_delta_z_sq);
+    let decrypted_sum = decryptor.decrypt(encrypted_sum_sq);
+    let decoded_sum = ckksEncoder.decode(decrypted_sum);
+    let encrypted_distance_float = parseFloat(decoded_sum[0]);
+
+    //after sent to client
+    let encrypted_distance = Math.sqrt(encrypted_distance_float);
+
+    //plaintext
+    let deltaX = X_A - X_B;
+    let deltaY = Y_A - Y_B;
+    let deltaZ = Z_A - Z_B;
+
+    let squareSum = deltaX ** 2 + deltaY ** 2 + deltaZ ** 2;
+    let plaintext_root = Math.sqrt(squareSum);
 
 
-    //encode and encrypt
-    let arr_test_multiply = Float64Array.from([testValue_1]);
-    let encoded_test_value_multiply = ckksEncoder.encode(arr_test_multiply, scale);
-    let encrypted_test_value_multiply = encryptor.encrypt(encoded_test_value_multiply);
-
-    let arr_test_subtract_1 = Float64Array.from([testValue_1]);
-    let encoded_test_value_arr_test_subtract_1 = ckksEncoder.encode(arr_test_subtract_1, scale);
-    let encrypted_test_value_arr_test_subtract_1 = encryptor.encrypt(encoded_test_value_arr_test_subtract_1);
-    let arr_test_subtract_2 = Float64Array.from([testValue_2]);
-    let encoded_test_value_arr_test_subtract_2 = ckksEncoder.encode(arr_test_subtract_2, scale);
-    let encrypted_test_value_arr_test_subtract_2 = encryptor.encrypt(encoded_test_value_arr_test_subtract_2);
-
-
-    let arr_test_add = Float64Array.from([testValue_1]);
-    let encoded_test_value_arr_test_add = ckksEncoder.encode(arr_test_add, scale);
-    let encrypted_test_value_arr_test_add = encryptor.encrypt(encoded_test_value_arr_test_add);
-
-
-    //multiply
-    let encrypted_test_multiply = evaluator.multiply(encrypted_test_value_multiply, encrypted_test_value_multiply);
-
-    //subtract
-    let encrypted_test_subtract = evaluator.sub(encrypted_test_value_arr_test_subtract_1, encrypted_test_value_arr_test_subtract_2);
-
-    //add
-    let encrypted_test_add = evaluator.add(encrypted_test_value_arr_test_add, encrypted_test_value_arr_test_add);
-
-    //decode and decrypt
-    let decrypted_test_value_multiply = decryptor.decrypt(encrypted_test_multiply);
-    let decoded_test_value_multiply = ckksEncoder.decode(decrypted_test_value_multiply);
-
-    let decrypted_test_value_subtract = decryptor.decrypt(encrypted_test_subtract);
-    let decoded_test_value_subtract = ckksEncoder.decode(decrypted_test_value_subtract);
-
-    let decrypted_test_value_add = decryptor.decrypt(encrypted_test_add);
-    let decoded_test_value_add = ckksEncoder.decode(decrypted_test_value_add);
-
-
-    console.log("ref multiply: ", ref_value_multiply);
-    console.log("decoded multiply: ", decoded_test_value_multiply[0]);
-
-    console.log("ref subtract: ", ref_value_subtract);
-    console.log("decoded subtract: ", decoded_test_value_subtract[0]);
-
-    console.log("ref add: ", ref_value_add);
-    console.log("decoded add: ", decoded_test_value_add[0]);
-
+    console.log("encrypted: ", encrypted_distance);
+    console.log("plaintext: ", plaintext_root);
 }
 
 )();
