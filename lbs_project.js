@@ -81,17 +81,21 @@
     let encrypted_Z_B = encryptor.encrypt(encoded_Z_B);
 
     //encrypted computations and decryptions
+    let encrypted_time_test_1 = process.hrtime(); //server side start
     let encrypted_delta_x = evaluator.sub(encrypted_X_A, encrypted_X_B);
     let encrypted_delta_y = evaluator.sub(encrypted_Y_A, encrypted_Y_B);
     let encrypted_delta_z = evaluator.sub(encrypted_Z_A, encrypted_Z_B);
-
     let encrypted_delta_x_sq = evaluator.multiply(encrypted_delta_x, encrypted_delta_x);
     let encrypted_delta_y_sq = evaluator.multiply(encrypted_delta_y, encrypted_delta_y);
     let encrypted_delta_z_sq = evaluator.multiply(encrypted_delta_z, encrypted_delta_z);
     let encrypted_sum_sq_1 = evaluator.add(encrypted_delta_x_sq, encrypted_delta_y_sq);
     let encrypted_sum_sq = evaluator.add(encrypted_sum_sq_1, encrypted_delta_z_sq);
+    let encrypted_time_test_2 = process.hrtime(encrypted_time_test_1); //server side stop
+    let encrypted_time = (encrypted_time_test_2[0] * 1000 + (encrypted_time_test_2[1] / 1000000));
+
     let decrypted_sum = decryptor.decrypt(encrypted_sum_sq);
     let decoded_sum = ckksEncoder.decode(decrypted_sum);
+
     let encrypted_distance_float = parseFloat(decoded_sum[0]);
 
     //after sent to client
@@ -108,6 +112,7 @@
 
     console.log("encrypted: ", encrypted_distance);
     console.log("plaintext: ", plaintext_root);
+    console.log("Execution time: ", encrypted_time)
 }
 
 )();
