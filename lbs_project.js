@@ -3,6 +3,9 @@
     const SEAL = require('node-seal');
     const seal = await SEAL();
 
+    const GeographicLib = require("geographiclib");
+    const geod = GeographicLib.Geodesic.WGS84;
+
     // Set the scheme type and security level
     const schemeType = seal.SchemeType.ckks;
     const securityLevel = seal.SecurityLevel.tc128;
@@ -20,6 +23,32 @@
             'Encryption parameters not valid'
         );
     }
+
+    /* ------ https://github.com/LenaSYS/Random-Number-Generator/blob/master/seededrandom.js ------ */
+    // Jenkins small fast with replace .random() for deterministic random numbers
+    function jsf32(a, b, c, d) {
+        a |= 0; b |= 0; c |= 0; d |= 0;
+        var t = a - (b << 23 | b >>> 9) | 0;
+        a = b ^ (c << 16 | c >>> 16) | 0;
+        b = c + (d << 11 | d >>> 21) | 0;
+        b = c + d | 0;
+        c = d + t | 0;
+        d = a + t | 0;
+        return (d >>> 0) / 4294967296;
+    }
+
+    Math.random = function () {
+        let ran = jsf32(0xF1EA5EED, Math.randSeed + 6871, Math.randSeed + 1889, Math.randSeed + 56781);
+        Math.randSeed += Math.floor(ran * 37237);
+        return (ran)
+    }
+
+    Math.setSeed = function (seed) {
+        Math.randSeed = seed;
+        for (let i = 0; i < 7; i++) Math.random();
+    }
+    Math.setSeed(14);
+
     const ckksEncoder = seal.CKKSEncoder(context);
     const keyGenerator = seal.KeyGenerator(context);
     const publicKey = keyGenerator.createPublicKey();
@@ -30,8 +59,10 @@
     const R = 6371; // Earth's radius in km
 
     //CLIENT A
-    let client_A_latitude = 32.92374; //phi
-    let client_A_longitude = 32.03947; //lambda
+    let client_A_latitude = (Math.random() * 180 - 90).toFixed(5); //phi
+    let client_A_longitude = (Math.random() * 360 - 180).toFixed(5); //lambda
+    console.log("Client A lat: ", client_A_latitude);
+    console.log("Client A lon: ", client_A_longitude);
 
     //to radians
     let client_A_latitude_radian = client_A_latitude * (Math.PI / 180);
@@ -43,8 +74,10 @@
     let Z_A = R * Math.sin(client_A_latitude_radian);
 
     //CLIENT B
-    let client_B_latitude = 18.03473; //phi
-    let client_B_longitude = 24.08465; //lambda
+    let client_B_latitude = (Math.random() * 180 - 90).toFixed(5);
+    let client_B_longitude = (Math.random() * 360 - 180).toFixed(5);
+    console.log("Client B lat: ", client_B_latitude);
+    console.log("Client B lon: ", client_B_longitude);
 
     //convert to radians
     let client_B_latitude_radian = client_B_latitude * (Math.PI / 180);
@@ -109,10 +142,19 @@
     let squareSum = deltaX ** 2 + deltaY ** 2 + deltaZ ** 2;
     let plaintext_root = Math.sqrt(squareSum);
 
+    // Karney (geographiclib)
+    let karney_result = geod.Inverse(
+        parseFloat(client_A_latitude),
+        parseFloat(client_A_longitude),
+        parseFloat(client_B_latitude),
+        parseFloat(client_B_longitude)
+    );
+
 
     console.log("encrypted: ", encrypted_distance);
     console.log("plaintext: ", plaintext_root);
     console.log("Execution time: ", encrypted_time)
+    console.log("Karney", (karney_result.s12 / 1000).toFixed(5));
 }
 
 )();
