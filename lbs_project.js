@@ -13,7 +13,7 @@
     }
     console.log(`Creating new file: ${outputFilePath}`);
 
-    const headers = `"Iteration","Encrypted distance (km)","Unencrypted distance (km)","Karney distance ref (km)"\n`;
+    const headers = `"Iteration","Encrypted time (ms)","Unencrypted time (ms)","Encrypted distance (km)","Unencrypted distance (km)","Karney distance ref (km)"\n`;
     fs.appendFileSync(outputFilePath, headers, 'utf8');
 
     /* ------ https://github.com/LenaSYS/Random-Number-Generator/blob/master/seededrandom.js ------ */
@@ -72,9 +72,9 @@
 
     /* ------------------------------- Client side data and conversions ------------------------------- */
     const R = 6371; // Earth's radius in km
-    const max_iterations = 10;
+    const max_iterations = 100;
 
-    for (let i = 0; i < max_iterations; i++) {
+    for (let i = 0; i < max_iterations + 1; i++) {
         Math.setSeed(i);
 
         //CLIENT A
@@ -130,33 +130,31 @@
 
         /* ------------------------------- Server side computations ------------------------------- */
         //ENCRYPTED COMPUTATIONS
-        let encrypted_time_test_1 = process.hrtime(); //server side start
+        let encrypted_time_start = process.hrtime();
         let encrypted_delta_x = evaluator.sub(encrypted_X_A, encrypted_X_B);
         let encrypted_delta_y = evaluator.sub(encrypted_Y_A, encrypted_Y_B);
         let encrypted_delta_z = evaluator.sub(encrypted_Z_A, encrypted_Z_B);
+
         let encrypted_delta_x_sq = evaluator.multiply(encrypted_delta_x, encrypted_delta_x);
         let encrypted_delta_y_sq = evaluator.multiply(encrypted_delta_y, encrypted_delta_y);
         let encrypted_delta_z_sq = evaluator.multiply(encrypted_delta_z, encrypted_delta_z);
         let encrypted_sum_sq_1 = evaluator.add(encrypted_delta_x_sq, encrypted_delta_y_sq);
         let encrypted_sum_sq = evaluator.add(encrypted_sum_sq_1, encrypted_delta_z_sq);
-        let encrypted_time_test_2 = process.hrtime(encrypted_time_test_1); //server side stop
-        let encrypted_time = (encrypted_time_test_2[0] * 1000 + (encrypted_time_test_2[1] / 1000000));
-
         let decrypted_sum = decryptor.decrypt(encrypted_sum_sq);
         let decoded_sum = ckksEncoder.decode(decrypted_sum);
-
         let encrypted_distance_float = parseFloat(decoded_sum[0]);
+        let encrypted_distance = Math.sqrt(encrypted_distance_float);
+        let encrypted_time_stop = process.hrtime(encrypted_time_start);
 
         //UNENCRYPTED COMPUTATIONS FOR COMPARISON
-        let encrypted_distance = Math.sqrt(encrypted_distance_float);
-
-        //plaintext
+        unencrypted_time_start = process.hrtime();
         let deltaX = X_A - X_B;
         let deltaY = Y_A - Y_B;
         let deltaZ = Z_A - Z_B;
 
         let squareSum = deltaX ** 2 + deltaY ** 2 + deltaZ ** 2;
         let unencrypted_distance = Math.sqrt(squareSum);
+        let unencrypted_time_stop = process.hrtime(unencrypted_time_start);
 
         // Karney (geographiclib)
         let karney_result = geod.Inverse(
@@ -166,11 +164,51 @@
             parseFloat(client_B_longitude)
         );
 
-        const csvData = `${i},${encrypted_distance.toFixed(5)},${unencrypted_distance.toFixed(5)},${((karney_result.s12 / 1000).toFixed(5))}\n`;
-        fs.appendFileSync(outputFilePath, csvData, 'utf8');
-        console.log("Row: ", i);
+        //STORE DATA
+        let encrypted_time = (encrypted_time_stop[0] * 1000 + (encrypted_time_stop[1] / 1000000));
+        let unencrypted_time = (unencrypted_time_stop[0] * 1000 + (unencrypted_time_stop[1] / 1000000));
 
+        if (i > 0) {
+            if ((max_iterations + 1 - i) % 50 === 0) {
+                console.log("Item: ", max_iterations + 1 - i);
+            }
+            const csvData = `${i},${encrypted_time},${unencrypted_time},${encrypted_distance.toFixed(5)},${unencrypted_distance.toFixed(5)},${((karney_result.s12 / 1000).toFixed(5))}\n`;
+            fs.appendFileSync(outputFilePath, csvData, 'utf8');
+        }
+        //FREE UP MEMORY
+        encrypted_X_A.delete();
+        encrypted_Y_A.delete();
+        encrypted_Z_A.delete();
+        encrypted_X_B.delete();
+        encrypted_Y_B.delete();
+        encrypted_Z_B.delete();
+        encrypted_delta_x.delete();
+        encrypted_delta_y.delete();
+        encrypted_delta_z.delete();
+        encrypted_delta_x_sq.delete();
+        encrypted_delta_y_sq.delete();
+        encrypted_delta_z_sq.delete();
+        encrypted_sum_sq_1.delete();
+        encrypted_sum_sq.delete();
+        decrypted_sum.delete();
+        encoded_X_A.delete();
+        encoded_Y_A.delete();
+        encoded_Z_A.delete();
+        encoded_X_B.delete();
+        encoded_Y_B.delete();
+        encoded_Z_B.delete();
     }
+    context.delete();
+    keyGenerator.delete();
+    publicKey.delete();
+    secretKey.delete();
+    encryptor.delete();
+    decryptor.delete();
+    evaluator.delete();
+    ckksEncoder.delete();
+    parms.delete();
+
+    console.log("\nDone!");
 }
 
 )();
