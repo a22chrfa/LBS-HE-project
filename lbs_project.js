@@ -40,20 +40,22 @@
         for (let i = 0; i < 7; i++) Math.random();
     }
 
+
     /* ------------------------------- Encryption settings and instance ------------------------------- */
     const SEAL = require('node-seal');
     const seal = await SEAL();
 
     // Set the scheme type and security level
     const schemeType = seal.SchemeType.ckks;
-    const securityLevel = seal.SecurityLevel.tc128;
-    const n_polyModulusDegree = 4096;
-    const modulusChain = [36, 36, 37];
+    const securityLevel = seal.SecurityLevel.tc192;
+    const n_polyModulusDegree = 16384;
+    const modulusChain = [60, 40, 30, 30, 30, 30];
     const scale = Math.pow(2, 20);
 
     const parms = seal.EncryptionParameters(schemeType);
     parms.setPolyModulusDegree(n_polyModulusDegree);
     parms.setCoeffModulus(seal.CoeffModulus.Create(n_polyModulusDegree, Int32Array.from(modulusChain)));
+    console.log("\nInitializing context");
     const context = seal.Context(parms, false, securityLevel);
 
     if (!context.parametersSet()) {
@@ -61,7 +63,6 @@
             'Encryption parameters not valid'
         );
     }
-
     const ckksEncoder = seal.CKKSEncoder(context);
     const keyGenerator = seal.KeyGenerator(context);
     const publicKey = keyGenerator.createPublicKey();
@@ -73,15 +74,17 @@
     /* ------------------------------- Client side data and conversions ------------------------------- */
     const R = 6371; // Earth's radius in km
     const max_iterations = 100;
+    console.log('\nPerforming encryption and calculations...');
 
     for (let i = 0; i < max_iterations + 1; i++) {
         Math.setSeed(i);
-
+        
         //CLIENT A
+        //coordinates
         let client_A_latitude = (Math.random() * 180 - 90).toFixed(5); //phi
         let client_A_longitude = (Math.random() * 360 - 180).toFixed(5); //lambda
 
-        //to radians
+        //convert to radians
         let client_A_latitude_radian = client_A_latitude * (Math.PI / 180);
         let client_A_longitude_radian = client_A_longitude * (Math.PI / 180);
 
@@ -90,7 +93,8 @@
         let Y_A = R * Math.cos(client_A_latitude_radian) * Math.sin(client_A_longitude_radian);
         let Z_A = R * Math.sin(client_A_latitude_radian);
 
-        //CLIENT B
+        // CLIENT B
+        //coordinates
         let client_B_latitude = (Math.random() * 180 - 90).toFixed(5);
         let client_B_longitude = (Math.random() * 360 - 180).toFixed(5);
 
@@ -158,9 +162,9 @@
 
         // Karney (geographiclib)
         let karney_result = geod.Inverse(
-            parseFloat(client_A_latitude),
-            parseFloat(client_A_longitude),
-            parseFloat(client_B_latitude),
+            parseFloat(client_A_latitude), 
+            parseFloat(client_A_longitude), 
+            parseFloat(client_B_latitude), 
             parseFloat(client_B_longitude)
         );
 
@@ -168,13 +172,15 @@
         let encrypted_time = (encrypted_time_stop[0] * 1000 + (encrypted_time_stop[1] / 1000000));
         let unencrypted_time = (unencrypted_time_stop[0] * 1000 + (unencrypted_time_stop[1] / 1000000));
 
-        if (i > 0) {
+        if(i > 0) {
             if ((max_iterations + 1 - i) % 50 === 0) {
                 console.log("Item: ", max_iterations + 1 - i);
             }
             const csvData = `${i},${encrypted_time},${unencrypted_time},${encrypted_distance.toFixed(5)},${unencrypted_distance.toFixed(5)},${((karney_result.s12 / 1000).toFixed(5))}\n`;
             fs.appendFileSync(outputFilePath, csvData, 'utf8');
+
         }
+
         //FREE UP MEMORY
         encrypted_X_A.delete();
         encrypted_Y_A.delete();
@@ -198,6 +204,7 @@
         encoded_Y_B.delete();
         encoded_Z_B.delete();
     }
+
     context.delete();
     keyGenerator.delete();
     publicKey.delete();
@@ -209,6 +216,4 @@
     parms.delete();
 
     console.log("\nDone!");
-}
-
-)();
+})();
