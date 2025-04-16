@@ -53,9 +53,9 @@ readline.question('Set # iterations: ', async (input) => {
 
     // Settings
     const schemeType = seal.SchemeType.ckks;
-    const securityLevel = seal.SecurityLevel.tc192;
+    const securityLevel = seal.SecurityLevel.tc256;
     const n_polyModulusDegree = 16384;
-    const modulusChain = [60, 40, 30, 30, 30, 30];
+    const modulusChain = [60, 50, 52, 60];
     const scale = Math.pow(2, 20);
 
     // Initialization
