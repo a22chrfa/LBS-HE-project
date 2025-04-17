@@ -165,7 +165,7 @@ readline.question('Set # iterations: ', async (input) => {
         let decrypted_sum = decryptor.decrypt(encrypted_sum_sq);
         let decoded_sum = ckksEncoder.decode(decrypted_sum);
         let encrypted_distance_float = parseFloat(decoded_sum[0]);
-        let encrypted_distance = Math.sqrt(encrypted_distance_float);
+        let encrypted_distance = Math.sqrt(encrypted_distance_float) || 0;
 
         /* ------------------------------------------------ OTHER COMPUTATIONS FOR DATA ------------------------------------------------ */
         // Plaintext computations (comparisons)
